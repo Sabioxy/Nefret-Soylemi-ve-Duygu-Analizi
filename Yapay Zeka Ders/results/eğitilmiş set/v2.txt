@@ -1,0 +1,191 @@
+import torch
+from transformers import BertTokenizer, BertForSequenceClassification
+import tkinter as tk
+from tkinter import messagebox, font, filedialog
+import speech_recognition as sr
+import whisper  # Whisper modeli
+
+# Model yolu ve ayarlar
+MODEL_PATH = "C:\\Users\\mamie\\Desktop\\Yapay Zeka Ders\\hate_speech_model_best.pth"
+NUM_LABELS = 2
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Tokenizer
+tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+
+# Whisper modelini yükle
+whisper_model = whisper.load_model(
+    "small"
+)  # "tiny", "base", "small", "medium", "large"
+
+
+# Model yükleme fonksiyonu
+def load_model(model_path, num_labels, device):
+    try:
+        model = BertForSequenceClassification.from_pretrained(
+            "bert-base-uncased", num_labels=num_labels, hidden_dropout_prob=0.3
+        )
+        model.to(device)
+        model.load_state_dict(torch.load(model_path, map_location=device))
+        model.eval()
+        print("Model başarıyla yüklendi.")
+        return model
+    except FileNotFoundError:
+        print(f"Model dosyası bulunamadı: {model_path}")
+        return None
+    except Exception as e:
+        print(f"Model yüklenirken hata oluştu: {e}")
+        return None
+
+
+# Metin temizleme
+def clean_text(text):
+    return text.strip()
+
+
+# Tahmin fonksiyonu
+def predict_hate_speech(text, model, tokenizer, device, max_len=128):
+    cleaned_text = clean_text(text)
+    encoding = tokenizer.encode_plus(
+        cleaned_text,
+        add_special_tokens=True,
+        max_length=max_len,
+        return_token_type_ids=False,
+        padding="max_length",
+        truncation=True,
+        return_attention_mask=True,
+        return_tensors="pt",
+    )
+    input_ids = encoding["input_ids"].to(device)
+    attention_mask = encoding["attention_mask"].to(device)
+
+    with torch.no_grad():
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+        predictions = torch.softmax(outputs.logits, dim=1)
+        predicted_class = torch.argmax(predictions, dim=1).item()
+    return "Nefret Söylemi" if predicted_class == 1 else "Nefret Söylemi Değil"
+
+
+# Ses tanıma (mikrofondan) ve tahmin etme
+def recognize_speech_and_predict():
+    r = sr.Recognizer()
+    with sr.Microphone() as source:
+        messagebox.showinfo("Dinleme", "Konuşmanızı başlatın...")
+        audio = r.listen(source)
+
+    try:
+        # Google Speech Recognition API ile ses tanıma
+        text = r.recognize_google(audio, language="tr-TR")
+
+        # Model ile tahmin yapma
+        prediction = predict_hate_speech(text, model, tokenizer, device)
+
+        # Tahmin sonucunu gösterme
+        messagebox.showinfo("Tahmin Sonucu", f"Metin: {text}\nTahmin: {prediction}")
+
+    except sr.UnknownValueError:
+        messagebox.showerror("Hata", "Ses anlaşılamadı.")
+    except sr.RequestError as e:
+        messagebox.showerror("Hata", f"Google hizmetine ulaşılamadı: {e}")
+
+
+# Dosyadan metin analizi
+def analyze_file():
+    file_path = filedialog.askopenfilename(
+        title="Metin dosyası seçin",
+        filetypes=(("Metin Dosyaları", "*.txt"), ("Tüm Dosyalar", "*.*")),
+    )
+    if not file_path:
+        return
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            file_text = f.read()
+
+        if not file_text.strip():
+            messagebox.showwarning("Uyarı", "Dosya boş.")
+            return
+
+        # Dosya içeriğini mesaj kutusunda göster
+        prediction = predict_hate_speech(file_text, model, tokenizer, device)
+        messagebox.showinfo(
+            "Dosya Analizi", f"Dosya İçeriği:\n{file_text}\n\nTahmin: {prediction}"
+        )
+    except Exception as e:
+        messagebox.showerror("Hata", f"Dosya okunamadı: {e}")
+
+
+# Ses dosyasından analiz (Whisper)
+def analyze_audio_file():
+    file_path = filedialog.askopenfilename(
+        title="Ses Dosyası Seç (.mp3/.wav)",
+        filetypes=[("Ses Dosyaları", "*.mp3 *.wav")],
+    )
+    if not file_path:
+        return
+    try:
+        result = whisper_model.transcribe(file_path, language="Turkish")
+        transcribed_text = result["text"]
+        prediction = predict_hate_speech(transcribed_text, model, tokenizer, device)
+        messagebox.showinfo(
+            "Ses Dosyası Analizi",
+            f"Metin: {transcribed_text}\n\nTahmin: {prediction}",
+        )
+    except Exception as e:
+        messagebox.showerror("Hata", f"Ses dosyası analiz edilemedi: {e}")
+
+
+# Ana arayüz fonksiyonu
+def main():
+    global model
+    model = load_model(MODEL_PATH, NUM_LABELS, device)
+    if model is None:
+        print("Model yüklenemedi.")
+        return
+
+    root = tk.Tk()
+    root.title("Nefret Söylemi Tespiti")
+    root.geometry("500x400")
+
+    font_style = font.Font(family="Arial", size=12)
+
+    input_label = tk.Label(root, text="Metin Girin:", font=font_style)
+    input_label.pack(pady=10)
+
+    input_text = tk.Entry(root, width=50, font=font_style)
+    input_text.pack(pady=10)
+
+    # Butonlar
+    speech_button = tk.Button(
+        root,
+        text="Sesi Tanı (Mikrofon)",
+        command=recognize_speech_and_predict,
+        font=font_style,
+    )
+    speech_button.pack(pady=5)
+
+    predict_button = tk.Button(
+        root,
+        text="Tahmin Et",
+        command=lambda: predict_and_show(input_text.get()),
+        font=font_style,
+    )
+    predict_button.pack(pady=10)
+
+    file_button = tk.Button(
+        root, text="Metin Dosyasından Analiz Et", command=analyze_file, font=font_style
+    )
+    file_button.pack(pady=5)
+
+    audio_file_button = tk.Button(
+        root,
+        text="Ses Dosyasından Analiz Et",
+        command=analyze_audio_file,
+        font=font_style,
+    )
+    audio_file_button.pack(pady=5)
+
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()

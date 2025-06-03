@@ -1,0 +1,8 @@
+                      precision    recall  f1-score   support
+
+Nefret Söylemi Deðil       1.00      0.99      0.99      4436
+      Nefret Söylemi       0.99      1.00      0.99      4415
+
+            accuracy                           0.99      8851
+           macro avg       0.99      0.99      0.99      8851
+        weighted avg       0.99      0.99      0.99      8851

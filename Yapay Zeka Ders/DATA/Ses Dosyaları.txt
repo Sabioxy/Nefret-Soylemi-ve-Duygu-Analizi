@@ -1,0 +1,1 @@
+Speech Emotions ipynb dosyası ile colab üzerinden çalıştırabilirsiniz. Aksi takdirde yine aynı dosyadan linkler ile erişim sağlayabilirsiniz.

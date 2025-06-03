@@ -1,0 +1,1 @@
+ffmpeg github klasörünü bulundurmanız gerekmektedir. nlp için ses tanıma kısmı

@@ -1,0 +1,1 @@
+hate_speech_model_last.pth dosyasını elde etmek için NLP.py dosyasını 1 kere çalıştırın.
